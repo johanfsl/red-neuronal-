@@ -1,66 +1,49 @@
 import torch
-import cv2
-import numpy as np
 import sys
 import os
-from prueba_adaface import model, device # Importamos tu modelo ya listo
 
-# 1. Función para preprocesar lo que ve la cámara
-def preprocesar_frame(face_crop):
-    face_crop = cv2.resize(face_crop, (112, 112))
-    face_crop = cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB)
-    face_crop = (face_crop.astype(np.float32) - 127.5) / 128.0
-    face_crop = np.transpose(face_crop, (2, 0, 1))
-    
-    # IMPORTANTE: Añadimos .half() para que coincida con el modelo MS1MV3
-    tensor = torch.from_numpy(face_crop).unsqueeze(0).to(device).half() 
-    return tensor
+# 1. LOCALIZACIÓN DINÁMICA
+ruta_base = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(ruta_base)
 
-# 2. Cargar tu foto de referencia (Base de Datos)
-ruta_yo = 'registros/yo.jpg'
-img_yo = cv2.imread(ruta_yo)
-if img_yo is None:
-    print(f"❌ Error: Pon tu foto en {ruta_yo}")
+# 2. CONFIGURACIÓN DE ALTO RENDIMIENTO (RTX 5060 Ti)
+# Aquí es donde ponemos el primer bloque que mencionaste
+device = torch.device('cuda')
+torch.backends.cudnn.benchmark = True # Optimiza el rendimiento para tu GPU
+
+try:
+    from model import common
+    print("✅ Código de arquitectura (common.py) detectado.")
+except ImportError:
+    print(f"❌ ERROR: No se encuentra 'common.py' en: {os.path.join(ruta_base, 'model')}")
     sys.exit()
 
-# Generar el vector (embedding) de "Yo"
-with torch.no_grad():
-    tensor_yo = preprocesar_frame(img_yo)
-    vec_referencia = model(tensor_yo)
+# 3. CREAR EL MODELO EN FP16 (Aquí va el segundo bloque)
+# El .half() hace que use menos VRAM y sea más rápido en tu 5060 Ti
+model = common.iresnet101(num_features=512).to(device).half() 
 
-# 3. Iniciar Cámara Web
-cap = cv2.VideoCapture(0)
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+# 4. CARGAR PESOS DE MS1MV3 (El "cerebro" nuevo que descargaste)
+nombre_pesos = 'adaface_ir101_ms1mv3.ckpt'
+ruta_pesos = os.path.join(ruta_base, 'weights', nombre_pesos)
 
-print("🚀 Cámara iniciada. Presiona 'q' para salir.")
-
-while True:
-    ret, frame = cap.read()
-    if not ret: break
-    
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
-    
-    for (x, y, w, h) in faces:
-        # Extraer solo el rostro
-        rostro_actual = frame[y:y+h, x:x+w]
+if os.path.exists(ruta_pesos):
+    try:
+        # Aquí va el tercer bloque de carga
+        checkpoint = torch.load(ruta_pesos, map_location=device)
+        state_dict = checkpoint['state_dict'] if 'state_dict' in checkpoint else checkpoint
         
-        with torch.no_grad():
-            tensor_actual = preprocesar_frame(rostro_actual)
-            vec_actual = model(tensor_actual)
+        # Limpieza de llaves para que coincidan con tu arquitectura
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            name = k[6:] if k.startswith('model.') else k
+            new_state_dict[name] = v
             
-            # Comparar similitud de coseno
-            similitud = torch.nn.functional.cosine_similarity(vec_actual, vec_referencia).item()
-        
-        # Umbral: Si es mayor a 0.45, eres tú
-        label = f"Identificado: {similitud:.2f}" if similitud > 0.45 else "Desconocido"
-        color = (0, 255, 0) if similitud > 0.45 else (0, 0, 255)
-        
-        cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
-        cv2.putText(frame, label, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-
-    cv2.imshow('Reconocimiento AdaFace SOTA', frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'): break
-
-cap.release()
-cv2.destroyAllWindows()
+        # El bloque de carga final que pediste
+        model.load_state_dict(new_state_dict, strict=False)
+        model.eval()
+        print(f"✅ ¡SISTEMA ACTUALIZADO! Usando dataset MS1MV3.")
+        print(f"🚀 OPTIMIZADO PARA RTX 5060 Ti (FP16 Activo)")
+    except Exception as e:
+        print(f"❌ Error al cargar los pesos: {e}")
+else:
+    print(f"❌ ARCHIVO NO ENCONTRADO EN: {ruta_pesos}")

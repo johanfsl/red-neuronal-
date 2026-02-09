@@ -1,0 +1,101 @@
+import cv2
+import sys
+
+print("🔍 DIAGNÓSTICO DE CÁMARA Y OPENCV\n")
+print("="*60)
+
+# 1. Verificar versión de OpenCV
+print(f"OpenCV versión: {cv2.__version__}")
+print(f"Backends disponibles: {cv2.getBuildInformation()}")
+
+# 2. Verificar soporte GUI
+print("\n" + "="*60)
+print("PRUEBA DE GUI:")
+try:
+    test_img = cv2.imread('/dev/null') if test_img is None else None
+    cv2.namedWindow("test", cv2.WINDOW_NORMAL)
+    print("✅ Soporte para ventanas: OK")
+    cv2.destroyAllWindows()
+except Exception as e:
+    print(f"❌ Error en GUI: {e}")
+
+# 3. Listar dispositivos de video
+print("\n" + "="*60)
+print("DISPOSITIVOS DE VIDEO:")
+import os
+video_devices = [f"/dev/video{i}" for i in range(10) if os.path.exists(f"/dev/video{i}")]
+if video_devices:
+    for dev in video_devices:
+        print(f"  • {dev}")
+else:
+    print("  ❌ No se encontraron dispositivos /dev/video*")
+
+# 4. Probar abrir cámara
+print("\n" + "="*60)
+print("PROBANDO CÁMARAS:")
+for i in range(5):
+    cap = cv2.VideoCapture(i)
+    if cap.isOpened():
+        ret, frame = cap.read()
+        if ret:
+            print(f"  ✅ /dev/video{i} - Funciona ({frame.shape[1]}x{frame.shape[0]})")
+        else:
+            print(f"  ⚠️  /dev/video{i} - Abre pero no captura frames")
+        cap.release()
+    else:
+        print(f"  ❌ /dev/video{i} - No se puede abrir")
+
+# 5. Prueba visual simple
+print("\n" + "="*60)
+print("PRUEBA VISUAL SIMPLE:")
+print("Intentando abrir cámara y mostrar ventana...")
+
+cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    print("❌ No se pudo abrir VideoCapture(0)")
+    print("\nPrueba manual:")
+    print("  ls -la /dev/video*")
+    print("  groups $(whoami)  # Verifica que estés en grupo 'video'")
+    sys.exit(1)
+
+print("✅ Cámara abierta")
+print("⏳ Capturando frame...")
+
+ret, frame = cap.read()
+if not ret:
+    print("❌ No se pudo capturar frame")
+    cap.release()
+    sys.exit(1)
+
+print(f"✅ Frame capturado: {frame.shape}")
+print("⏳ Intentando mostrar ventana...")
+
+try:
+    cv2.imshow("TEST - Presiona Q para salir", frame)
+    print("✅ Ventana creada")
+    print("\n" + "="*60)
+    print("Si ves la ventana, presiona Q para cerrar")
+    print("Si NO ves ventana, presiona Ctrl+C")
+    print("="*60)
+    
+    while True:
+        ret, frame = cap.read()
+        if ret:
+            cv2.imshow("TEST - Presiona Q para salir", frame)
+        
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
+            break
+    
+    print("\n✅ TODO FUNCIONA CORRECTAMENTE")
+    
+except Exception as e:
+    print(f"❌ Error mostrando ventana: {e}")
+    print("\nPosibles soluciones:")
+    print("  1. sudo pacman -S gtk3 qt5-base")
+    print("  2. pip uninstall opencv-python opencv-python-headless")
+    print("  3. pip install opencv-contrib-python")
+
+finally:
+    cap.release()
+    cv2.destroyAllWindows()
