@@ -1,11 +1,13 @@
-*.pyc
-.vscode
+# Entorno virtual
+env/
+
+# Pesos del modelo (Demasiado pesados para GitHub)
+weights/*.ckpt
 *.ckpt
-.idea
-experiments
-playground
-validation_ijbs
-*.pkl
-*.csv
-result
-scripts/run_debug*
+
+# Fotos de registros personales
+registros/
+*.jpg
+
+# Caché de Python
+__pycache__/
